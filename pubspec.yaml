@@ -38,7 +38,9 @@ dependencies:
   cupertino_icons: ^1.0.2
   perfect_volume_control: ^1.0.5
   audio_session: ^0.1.13
-  
+  flutter_local_notifications: ^13.0.0
+  flutter_background_service: ^2.4.6
+  shared_preferences: ^2.0.15
 dev_dependencies:
   flutter_test:
     sdk: flutter
