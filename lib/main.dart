@@ -12,20 +12,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 //background service knowledge
 //https://medium.com/@mustafatahirhussein/using-background-services-in-flutter-77c201f0c1b2
 
+//Use shared_preferences for shared variable between function
+
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeService();
+  WidgetsFlutterBinding.ensureInitialized(); //initial background service
+  await initializeService(); //initial background service
   runApp(const MyApp());
 }
 
-Future<void> readyForShared() async {
-  var sharedPreferences = await SharedPreferences.getInstance();
-  //counterValue = sharedPreferences.getString("timeLeftString") ?? "0";
-}
+// Future<void> readyForShared() async {
+//   var sharedPreferences = await SharedPreferences.getInstance();
+// }
 
-Future<void> saveData(String value) async {
+Future<void> saveDataTimeLeft(String value) async {
   var sharedPreferences = await SharedPreferences.getInstance();
   sharedPreferences.setString("timeLeftString", value);
+}
+
+Future<void> saveDataTimeSet(String value) async {
+  var sharedPreferences = await SharedPreferences.getInstance();
+  sharedPreferences.setString("timeSetString", value);
+}
+
+Future<void> saveDataCancelStatus(String value) async {
+  var sharedPreferences = await SharedPreferences.getInstance();
+  sharedPreferences.setString("CancelStatusString", value);
 }
 
 Future<void> initializeService() async {
@@ -36,7 +47,7 @@ Future<void> initializeService() async {
       onStart: onStart,
 
       // auto start service
-      autoStart: true,
+      autoStart: false,
       isForegroundMode: true,
     ),
     iosConfiguration: IosConfiguration(
@@ -53,12 +64,16 @@ Future<void> initializeService() async {
   //service.startService();
 }
 
-bool onIosBackground(ServiceInstance service) {
-  WidgetsFlutterBinding.ensureInitialized();
-  print('FLUTTER BACKGROUND FETCH');
+// bool onIosBackground(ServiceInstance service) {
+//   WidgetsFlutterBinding.ensureInitialized();
+//   print('FLUTTER BACKGROUND FETCH');
 
-  return true;
-}
+//   return true;
+// }
+
+int timeLeft = 10 * 60;
+
+final service = FlutterBackgroundService();
 
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
@@ -85,23 +100,52 @@ void onStart(ServiceInstance service) async {
       service.setForegroundNotificationInfo(
         title: "Sleep Timer",
         content:
-            "${sharedPreferences.getString("timeLeftString") ?? 'no data'}",
+            "${sharedPreferences.getString("timeLeftString") ?? 'no data'}", //if null then display no data
       );
     }
-    // var timeLeftInt =
-    //     int.parse(sharedPreferences.getString("timeLeftString").toString());
-    // if (timeLeftInt <= 0) {
-    //   final session = await AudioSession.instance;
-    //   await session.setActive(true); //for pause music app
-    // }
+
+    var TimeoutCheck =
+        int.parse(sharedPreferences.getString("timeLeftString").toString());
+    var cancel_status =
+        int.parse(sharedPreferences.getString("CancelStatusString").toString());
+    if (cancel_status == 1) {
+      await saveDataCancelStatus('0');
+      service.stopSelf();
+    } else if (TimeoutCheck <= 0) {
+      await _startCountDown();
+      Timer(Duration(seconds: 5), () {
+        timeLeft =
+            int.parse(sharedPreferences.getString("timeSetString").toString());
+        saveDataTimeLeft(timeLeft.toString());
+        service.stopSelf(); //stop background service
+      });
+    } else {
+      await _startCountDown(); //execute function _startCountDown
+    }
 
     /// you can see this log in logcat
-    // print(timeLeftInt);
-    print('FLUTTER BACKGROUND SERVICE: ${DateTime.now()}');
+    print(sharedPreferences.getString("timeLeftString"));
+    //print(sharedPreferences.getString("timeSetString"));
+    //print('FLUTTER BACKGROUND SERVICE: ${DateTime.now()}');
   });
 }
 
-int timeLeft = 10 * 60;
+Future _startCountDown() async {
+  var sharedPreferences = await SharedPreferences.getInstance();
+  timeLeft =
+      int.parse(sharedPreferences.getString("timeLeftString").toString());
+  if (timeLeft > 0) {
+    timeLeft--;//counter timer
+    await saveDataTimeLeft(timeLeft.toString());
+  } else {
+    final session = await AudioSession.instance;
+    await session.setActive(true); //for pause music app
+    Timer(Duration(seconds: 3), () {
+      PerfectVolumeControl.setVolume(0);
+    }); //mute volume when timeout
+
+  }
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -124,44 +168,26 @@ class SleepTimer extends StatefulWidget {
 }
 
 class _SleepTimerState extends State<SleepTimer> {
-  // int timeLeft = 10 * 60;
-  int timeset = 10 * 60;
+  int t_timeLeft = 0;
+  int timeset = 0;
   int cancel_status = 0;
-
-  final service = FlutterBackgroundService();
-  late final ServiceInstance serviceNotify;
-
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    readyForShared();
+    // readyForShared();
+    DisplayCounter(); //Continue counter after clear app
   }
 
-  Future _startCountDow() async {
-    Timer.periodic(Duration(seconds: 1), (timer) async {
-      if (timeLeft > 0 && cancel_status == 0) {
-        timeLeft--;
-        await saveData(timeLeft.toString());
-
-        
-        setState(() {});
-      } else {
-        if (cancel_status != 1) {
-          final session = await AudioSession.instance;
-          await session.setActive(true); //for pause music app
-          Timer(Duration(seconds: 7), () {
-            PerfectVolumeControl.setVolume(0);
-          });
-        } else {
-          setState(() {
-            timeLeft = timeset;
-            cancel_status = 0;
-          });
-        }
-        service.invoke("stopService");
-        timer.cancel();
-      }
+  Future<void> DisplayCounter() async {
+    var sharedPreferences = await SharedPreferences.getInstance();
+    Timer.periodic(const Duration(seconds: 1), (timer) async {
+      await sharedPreferences.reload();
+      //reload value of variable in sharedPreferences
+      t_timeLeft =
+          int.parse(sharedPreferences.getString("timeLeftString").toString());
+      //get value from timeLeftString variable
+      setState(() {});
     });
   }
 
@@ -172,7 +198,7 @@ class _SleepTimerState extends State<SleepTimer> {
           context: context,
           builder: (BuildContext context) {
             return const Dialog(
-              child: Volumn(),
+              child: Volumn(), //run widget from volumn.dart
             );
           });
     }
@@ -180,11 +206,10 @@ class _SleepTimerState extends State<SleepTimer> {
     return Scaffold(
       body: Center(
           child: Column(
-        // mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           SizedBox(height: 100),
           Text(
-            timeLeft <= 0 ? 'DONE' : ((timeLeft / 60).ceil()).toString(),
+            t_timeLeft <= 0 ? 'DONE' : t_timeLeft.toString(),
             style: TextStyle(fontSize: 100),
           ),
           SizedBox(height: 50),
@@ -192,36 +217,39 @@ class _SleepTimerState extends State<SleepTimer> {
               child: Text("S T A R T"),
               color: Colors.green,
               onPressed: () async {
-                timeLeft = timeset;
-                await service.startService();
-                FlutterBackgroundService().invoke("setAsForeground");
-                setState(() {
-                  _startCountDow();
-                });
+                var sharedPreferences = await SharedPreferences.getInstance();
+                timeLeft = int.parse(
+                    sharedPreferences.getString("timeSetString").toString());
+                await saveDataTimeLeft(
+                    timeLeft.toString()); //save data to variable timeSetString
+                cancel_status = 0;
+                await saveDataCancelStatus(cancel_status.toString());
+                await service.startService(); //start background service
+                FlutterBackgroundService()
+                    .invoke("setAsForeground"); //set forground on notification
               }),
           SizedBox(height: 30),
           MaterialButton(
               child: Text("C A N C E L"),
               color: Colors.red.shade200,
               onPressed: () async {
-                timeLeft = timeset;
-                var isRunning = await service.isRunning();
-                if (isRunning) {
-                  service.invoke("stopService");
-                }
-                setState(() {
-                  cancel_status = 1;
-                });
+                var sharedPreferences = await SharedPreferences.getInstance();
+                timeLeft = int.parse(
+                    sharedPreferences.getString("timeLeftString").toString());
+                cancel_status = 1;
+                await saveDataCancelStatus(cancel_status.toString());
+                //service.invoke("stopService"); //stop background service
               }),
           Padding(
             padding: const EdgeInsets.all(70),
             child: TextField(
-                onChanged: (value) {
+                onChanged: (value) async {
                   if (value != "") {
                     timeset = int.parse(value) * 60; //sec -> min
                   } else {
                     timeset = 10 * 60; //sec -> min
                   }
+                  await saveDataTimeSet(timeset.toString());
                 },
                 textAlign: TextAlign.center,
                 obscureText: false,
