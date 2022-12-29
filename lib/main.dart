@@ -96,16 +96,17 @@ void onStart(ServiceInstance service) async {
   Timer.periodic(const Duration(seconds: 1), (timer) async {
     var sharedPreferences = await SharedPreferences.getInstance();
     await sharedPreferences.reload(); // Its important
+    var TimeoutCheck =
+        int.parse(sharedPreferences.getString("timeLeftString").toString());
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: "Sleep Timer",
         content:
-            "${sharedPreferences.getString("timeLeftString") ?? 'no data'}", //if null then display no data
+            "${(TimeoutCheck/ 60).ceil()} 分 = ${TimeoutCheck}秒", //if null then display no data
       );
     }
 
-    var TimeoutCheck =
-        int.parse(sharedPreferences.getString("timeLeftString").toString());
+    
     var cancel_status =
         int.parse(sharedPreferences.getString("CancelStatusString").toString());
     if (cancel_status == 1) {
@@ -135,7 +136,7 @@ Future _startCountDown() async {
   timeLeft =
       int.parse(sharedPreferences.getString("timeLeftString").toString());
   if (timeLeft > 0) {
-    timeLeft--;//counter timer
+    timeLeft--; //counter timer
     await saveDataTimeLeft(timeLeft.toString());
   } else {
     final session = await AudioSession.instance;
@@ -209,8 +210,15 @@ class _SleepTimerState extends State<SleepTimer> {
         children: [
           SizedBox(height: 100),
           Text(
-            t_timeLeft <= 0 ? 'DONE' : t_timeLeft.toString(),
-            style: TextStyle(fontSize: 100),
+            t_timeLeft <= 0
+                ? 'DONE'
+                : '${(t_timeLeft / 60).ceil().toString()} min',
+            style: TextStyle(fontSize: 50),
+          ),
+          SizedBox(height: 15),
+          Text(
+            t_timeLeft <= 0 ? '' : '${t_timeLeft.toString()} s',
+            style: TextStyle(fontSize: 50),
           ),
           SizedBox(height: 50),
           MaterialButton(
